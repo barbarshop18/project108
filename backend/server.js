@@ -143,28 +143,34 @@ const fetchHistoricalData = async (timeRange) => {
   try {
     const now = new Date();
     let startDate = new Date(now);
-    let interval = '1 MINUTE'; // Default interval for realtime
+    let interval = '1 MINUTE';
+    let limit = 150; // Default limit for realtime view
     
     switch(timeRange) {
       case '30d':
         startDate.setDate(now.getDate() - 30);
         interval = '6 HOUR';
+        limit = 120; // 5 days worth of 6-hour intervals
         break;
       case '7d':
         startDate.setDate(now.getDate() - 7);
         interval = '1 HOUR';
+        limit = 168; // 7 days worth of hourly data
         break;
       case '24h':
         startDate.setDate(now.getDate() - 1);
         interval = '10 MINUTE';
+        limit = 144; // 24 hours worth of 10-minute intervals
         break;
       case '1h':
         startDate.setHours(now.getHours() - 1);
         interval = '1 MINUTE';
+        limit = 60; // 1 hour worth of minute-by-minute data
         break;
       default: // realtime
-        startDate.setMinutes(now.getMinutes() - 5); // Last 5 minutes for realtime view
+        startDate.setMinutes(now.getMinutes() - 150); // Last 150 data points
         interval = '1 MINUTE';
+        limit = 150;
     }
     
     const startDateStr = startDate.toISOString().slice(0, 19).replace('T', ' ');
@@ -183,8 +189,9 @@ const fetchHistoricalData = async (timeRange) => {
       FROM sensor_data
       WHERE waktu >= ?
       GROUP BY timestamp
-      ORDER BY timestamp ASC
-    `, [interval, startDateStr]);
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `, [interval, startDateStr, limit]);
 
     const [upsTemp] = await pool.query(`
       SELECT 
@@ -199,8 +206,9 @@ const fetchHistoricalData = async (timeRange) => {
       FROM sensor_data1
       WHERE waktu >= ?
       GROUP BY timestamp
-      ORDER BY timestamp ASC
-    `, [interval, startDateStr]);
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `, [interval, startDateStr, limit]);
 
     // Fetch humidity data with time-based aggregation
     const [nocHum] = await pool.query(`
@@ -216,8 +224,9 @@ const fetchHistoricalData = async (timeRange) => {
       FROM sensor_data
       WHERE waktu >= ?
       GROUP BY timestamp
-      ORDER BY timestamp ASC
-    `, [interval, startDateStr]);
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `, [interval, startDateStr, limit]);
 
     const [upsHum] = await pool.query(`
       SELECT 
@@ -232,8 +241,9 @@ const fetchHistoricalData = async (timeRange) => {
       FROM sensor_data1
       WHERE waktu >= ?
       GROUP BY timestamp
-      ORDER BY timestamp ASC
-    `, [interval, startDateStr]);
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `, [interval, startDateStr, limit]);
 
     // Fetch electrical data with time-based aggregation
     const [electrical] = await pool.query(`
@@ -251,19 +261,21 @@ const fetchHistoricalData = async (timeRange) => {
       FROM listrik_noc
       WHERE waktu >= ?
       GROUP BY timestamp
-      ORDER BY timestamp ASC
-    `, [interval, startDateStr]);
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `, [interval, startDateStr, limit]);
 
+    // Reverse the arrays to maintain chronological order
     return {
       temperature: {
-        noc: nocTemp,
-        ups: upsTemp
+        noc: nocTemp.reverse(),
+        ups: upsTemp.reverse()
       },
       humidity: {
-        noc: nocHum,
-        ups: upsHum
+        noc: nocHum.reverse(),
+        ups: upsHum.reverse()
       },
-      electrical
+      electrical: electrical.reverse()
     };
   } catch (error) {
     console.error('Error fetching historical data:', error);

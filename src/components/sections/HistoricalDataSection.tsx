@@ -19,8 +19,9 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
+  Tooltip,
 } from '@mui/material';
-import { BarChart3, Calendar, FileSpreadsheet, Download, Table } from 'lucide-react';
+import { BarChart3, Calendar, FileSpreadsheet, Download, Table, Info } from 'lucide-react';
 import { DataType } from '../../types';
 import TemperatureChart from '../charts/TemperatureChart';
 import HumidityChart from '../charts/HumidityChart';
@@ -58,9 +59,9 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
     // Set up polling interval based on timeRange
     const interval = setInterval(() => {
       socket.emit('request_historical_data', { timeRange });
-    }, timeRange === 'realtime' ? 60000 : // 1 minute for realtime
-       timeRange === '1h' ? 60000 : // 1 minute for 1h view
-       10000); // 10 seconds for other views
+    }, timeRange === 'realtime' ? 5000 : // 5 seconds for realtime
+       timeRange === '1h' ? 30000 : // 30 seconds for 1h view
+       60000); // 1 minute for other views
 
     return () => {
       socket.off('historical_data_update');
@@ -182,15 +183,15 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
   const getTimeRangeLabel = () => {
     switch (timeRange) {
       case 'realtime':
-        return 'Real-time (1 min intervals)';
+        return 'Real-time (150 latest points)';
       case '1h':
-        return 'Last Hour';
+        return 'Last Hour (1 min intervals)';
       case '24h':
-        return 'Last 24 Hours';
+        return 'Last 24 Hours (10 min intervals)';
       case '7d':
-        return 'Last 7 Days';
+        return 'Last 7 Days (1 hour intervals)';
       case '30d':
-        return 'Last 30 Days';
+        return 'Last 30 Days (6 hour intervals)';
       default:
         return '';
     }
@@ -326,7 +327,7 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
       
       <CardContent>
         {loading ? (
-          <Skeleton variant="rectangular\" height={300} width="100%" />
+          <Skeleton variant="rectangular" height={300} width="100%" />
         ) : (
           <Box sx={{ mt: 1 }}>
             {activeTab === 0 && (
