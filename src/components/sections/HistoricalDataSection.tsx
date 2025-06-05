@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Card, 
   CardContent, 
@@ -35,7 +35,7 @@ interface HistoricalDataSectionProps {
 }
 
 const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectionProps) => {
-  const [timeRange, setTimeRange] = useState('24h');
+  const [timeRange, setTimeRange] = useState('realtime');
   const [activeTab, setActiveTab] = useState(0);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportAnchorEl, setExportAnchorEl] = useState<null | HTMLElement>(null);
@@ -55,10 +55,12 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
       setLastUpdate(new Date());
     });
 
-    // Set up polling interval
+    // Set up polling interval based on timeRange
     const interval = setInterval(() => {
       socket.emit('request_historical_data', { timeRange });
-    }, 10000); // Poll every 10 seconds
+    }, timeRange === 'realtime' ? 60000 : // 1 minute for realtime
+       timeRange === '1h' ? 60000 : // 1 minute for 1h view
+       10000); // 10 seconds for other views
 
     return () => {
       socket.off('historical_data_update');
@@ -177,6 +179,23 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
     return activeData?.length || 0;
   };
 
+  const getTimeRangeLabel = () => {
+    switch (timeRange) {
+      case 'realtime':
+        return 'Real-time (1 min intervals)';
+      case '1h':
+        return 'Last Hour';
+      case '24h':
+        return 'Last 24 Hours';
+      case '7d':
+        return 'Last 7 Days';
+      case '30d':
+        return 'Last 30 Days';
+      default:
+        return '';
+    }
+  };
+
   return (
     <Card 
       sx={{ 
@@ -252,14 +271,20 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
                 } 
               }}
             >
+              <ToggleButton value="realtime" aria-label="realtime">
+                Realtime
+              </ToggleButton>
+              <ToggleButton value="1h" aria-label="1 hour">
+                1H
+              </ToggleButton>
               <ToggleButton value="24h" aria-label="24 hours">
-                24h
+                24H
               </ToggleButton>
               <ToggleButton value="7d" aria-label="7 days">
-                7d
+                7D
               </ToggleButton>
               <ToggleButton value="30d" aria-label="30 days">
-                30d
+                30D
               </ToggleButton>
             </ToggleButtonGroup>
           </Stack>
@@ -301,7 +326,7 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
       
       <CardContent>
         {loading ? (
-          <Skeleton variant="rectangular\" height={300} width="100%" />
+          <Skeleton variant="rectangular" height={300} width="100%" />
         ) : (
           <Box sx={{ mt: 1 }}>
             {activeTab === 0 && (
@@ -347,7 +372,7 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
               Current View
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {getTabLabel(activeTab)} • {timeRange === '24h' ? 'Last 24 Hours' : timeRange === '7d' ? 'Last 7 Days' : 'Last 30 Days'}
+              {getTabLabel(activeTab)} • {getTimeRangeLabel()}
             </Typography>
           </Box>
           <Box>
