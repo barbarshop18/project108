@@ -40,22 +40,30 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
   const [exportLoading, setExportLoading] = useState(false);
   const [exportAnchorEl, setExportAnchorEl] = useState<null | HTMLElement>(null);
   const { socket } = useSocket();
+  const [historicalData, setHistoricalData] = useState(data.historical);
+  const [lastUpdate, setLastUpdate] = useState(new Date());
 
-  // Request historical data on mount and when time range changes
   useEffect(() => {
-    if (socket) {
-      const requestData = () => {
-        socket.emit('request_historical_data', { timeRange });
-      };
+    if (!socket) return;
 
-      // Initial request
-      requestData();
+    // Request initial data
+    socket.emit('request_historical_data', { timeRange });
 
-      // Set up interval for real-time updates
-      const interval = setInterval(requestData, 10000); // Update every 10 seconds
+    // Listen for historical data updates
+    socket.on('historical_data_update', (newData) => {
+      setHistoricalData(newData);
+      setLastUpdate(new Date());
+    });
 
-      return () => clearInterval(interval);
-    }
+    // Set up polling interval
+    const interval = setInterval(() => {
+      socket.emit('request_historical_data', { timeRange });
+    }, 10000); // Poll every 10 seconds
+
+    return () => {
+      socket.off('historical_data_update');
+      clearInterval(interval);
+    };
   }, [socket, timeRange]);
 
   const handleTimeRangeChange = (
@@ -107,7 +115,7 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
         throw new Error('Authentication token not found');
       }
 
-      const response = await fetch(`${baseUrl}/api/export/${endpoint}?timeRange=${timeRange}&limit=100`, {
+      const response = await fetch(`${baseUrl}/api/export/${endpoint}?timeRange=${timeRange}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -159,6 +167,16 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
     }
   };
 
+  const getDataPointCount = () => {
+    const activeData = activeTab === 0 
+      ? historicalData.temperature?.noc 
+      : activeTab === 1 
+        ? historicalData.humidity?.noc 
+        : historicalData.electrical;
+    
+    return activeData?.length || 0;
+  };
+
   return (
     <Card 
       sx={{ 
@@ -208,9 +226,6 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
                   border: '1px solid rgba(255, 255, 255, 0.1)',
                   boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
                 }
-              }}
-              MenuListProps={{
-                'aria-hidden': false
               }}
             >
               <MenuItem onClick={exportData}>
@@ -286,28 +301,28 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
       
       <CardContent>
         {loading ? (
-          <Skeleton variant="rectangular\" height={300} width="100%" />
+          <Skeleton variant="rectangular" height={300} width="100%" />
         ) : (
           <Box sx={{ mt: 1 }}>
             {activeTab === 0 && (
               <TemperatureChart 
-                nocData={data.historical.temperature?.noc || []} 
-                upsData={data.historical.temperature?.ups || []} 
+                nocData={historicalData.temperature?.noc || []} 
+                upsData={historicalData.temperature?.ups || []} 
                 timeRange={timeRange}
               />
             )}
             
             {activeTab === 1 && (
               <HumidityChart 
-                nocData={data.historical.humidity?.noc || []} 
-                upsData={data.historical.humidity?.ups || []} 
+                nocData={historicalData.humidity?.noc || []} 
+                upsData={historicalData.humidity?.ups || []} 
                 timeRange={timeRange}
               />
             )}
             
             {activeTab === 2 && (
               <ElectricalChart 
-                data={data.historical.electrical || []} 
+                data={historicalData.electrical || []} 
                 timeRange={timeRange}
               />
             )}
@@ -340,9 +355,7 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
               Data Points
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {timeRange === '24h' ? '144 samples (10 min intervals)' : 
-               timeRange === '7d' ? '168 samples (1 hour intervals)' : 
-               '120 samples (6 hour intervals)'}
+              {getDataPointCount()} samples
             </Typography>
           </Box>
           <Box>
@@ -350,7 +363,7 @@ const HistoricalDataSection = ({ data, loading, isMobile }: HistoricalDataSectio
               Last Updated
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {format(new Date(), 'dd MMM yyyy HH:mm:ss')}
+              {format(lastUpdate, 'dd MMM yyyy HH:mm:ss')}
             </Typography>
           </Box>
         </Box>
