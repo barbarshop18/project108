@@ -139,6 +139,83 @@ async function checkDatabaseConnection() {
   }
 }
 
+const fetchHistoricalData = async (timeRange) => {
+  try {
+    const now = new Date();
+    let startDate = new Date(now);
+    
+    switch(timeRange) {
+      case '7d':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case '30d':
+        startDate.setDate(now.getDate() - 30);
+        break;
+      default: // 24h
+        startDate.setDate(now.getDate() - 1);
+    }
+    
+    const startDateStr = startDate.toISOString().slice(0, 19).replace('T', ' ');
+    
+    // Fetch temperature data
+    const [nocTemp] = await pool.query(`
+      SELECT waktu as timestamp, suhu as value
+      FROM sensor_data
+      WHERE waktu >= ?
+      ORDER BY waktu ASC
+    `, [startDateStr]);
+
+    const [upsTemp] = await pool.query(`
+      SELECT waktu as timestamp, suhu as value
+      FROM sensor_data1
+      WHERE waktu >= ?
+      ORDER BY waktu ASC
+    `, [startDateStr]);
+
+    // Fetch humidity data
+    const [nocHum] = await pool.query(`
+      SELECT waktu as timestamp, kelembapan as value
+      FROM sensor_data
+      WHERE waktu >= ?
+      ORDER BY waktu ASC
+    `, [startDateStr]);
+
+    const [upsHum] = await pool.query(`
+      SELECT waktu as timestamp, kelembapan as value
+      FROM sensor_data1
+      WHERE waktu >= ?
+      ORDER BY waktu ASC
+    `, [startDateStr]);
+
+    // Fetch electrical data
+    const [electrical] = await pool.query(`
+      SELECT 
+        waktu as timestamp,
+        phase_r,
+        phase_s,
+        phase_t
+      FROM listrik_noc
+      WHERE waktu >= ?
+      ORDER BY waktu ASC
+    `, [startDateStr]);
+
+    return {
+      temperature: {
+        noc: nocTemp,
+        ups: upsTemp
+      },
+      humidity: {
+        noc: nocHum,
+        ups: upsHum
+      },
+      electrical
+    };
+  } catch (error) {
+    console.error('Error fetching historical data:', error);
+    throw error;
+  }
+};
+
 // API routes
 app.get('/', (req, res) => {
   res.send('NOC Monitoring Backend is running');
@@ -388,6 +465,15 @@ io.on('connection', (socket) => {
 
   socket.on('error', (error) => {
     console.error('Socket error:', error);
+  });
+
+  socket.on('request_historical_data', async ({ timeRange }) => {
+    try {
+      const historicalData = await fetchHistoricalData(timeRange);
+      socket.emit('historical_data_update', historicalData);
+    } catch (error) {
+      console.error('Error sending historical data:', error);
+    }
   });
 });
 
