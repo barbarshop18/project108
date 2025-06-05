@@ -143,61 +143,116 @@ const fetchHistoricalData = async (timeRange) => {
   try {
     const now = new Date();
     let startDate = new Date(now);
+    let interval = '1 MINUTE'; // Default interval for realtime
     
     switch(timeRange) {
-      case '7d':
-        startDate.setDate(now.getDate() - 7);
-        break;
       case '30d':
         startDate.setDate(now.getDate() - 30);
+        interval = '6 HOUR';
         break;
-      default: // 24h
+      case '7d':
+        startDate.setDate(now.getDate() - 7);
+        interval = '1 HOUR';
+        break;
+      case '24h':
         startDate.setDate(now.getDate() - 1);
+        interval = '10 MINUTE';
+        break;
+      case '1h':
+        startDate.setHours(now.getHours() - 1);
+        interval = '1 MINUTE';
+        break;
+      default: // realtime
+        startDate.setMinutes(now.getMinutes() - 5); // Last 5 minutes for realtime view
+        interval = '1 MINUTE';
     }
     
     const startDateStr = startDate.toISOString().slice(0, 19).replace('T', ' ');
     
-    // Fetch temperature data
+    // Fetch temperature data with time-based aggregation
     const [nocTemp] = await pool.query(`
-      SELECT waktu as timestamp, suhu as value
+      SELECT 
+        DATE_FORMAT(
+          DATE_ADD(
+            DATE_FORMAT(waktu, '%Y-%m-%d %H:%i:00'),
+            INTERVAL (MINUTE(waktu) DIV MINUTE(?)) MINUTE
+          ),
+          '%Y-%m-%d %H:%i:%s'
+        ) as timestamp,
+        ROUND(AVG(suhu), 1) as value
       FROM sensor_data
       WHERE waktu >= ?
-      ORDER BY waktu ASC
-    `, [startDateStr]);
+      GROUP BY timestamp
+      ORDER BY timestamp ASC
+    `, [interval, startDateStr]);
 
     const [upsTemp] = await pool.query(`
-      SELECT waktu as timestamp, suhu as value
+      SELECT 
+        DATE_FORMAT(
+          DATE_ADD(
+            DATE_FORMAT(waktu, '%Y-%m-%d %H:%i:00'),
+            INTERVAL (MINUTE(waktu) DIV MINUTE(?)) MINUTE
+          ),
+          '%Y-%m-%d %H:%i:%s'
+        ) as timestamp,
+        ROUND(AVG(suhu), 1) as value
       FROM sensor_data1
       WHERE waktu >= ?
-      ORDER BY waktu ASC
-    `, [startDateStr]);
+      GROUP BY timestamp
+      ORDER BY timestamp ASC
+    `, [interval, startDateStr]);
 
-    // Fetch humidity data
+    // Fetch humidity data with time-based aggregation
     const [nocHum] = await pool.query(`
-      SELECT waktu as timestamp, kelembapan as value
+      SELECT 
+        DATE_FORMAT(
+          DATE_ADD(
+            DATE_FORMAT(waktu, '%Y-%m-%d %H:%i:00'),
+            INTERVAL (MINUTE(waktu) DIV MINUTE(?)) MINUTE
+          ),
+          '%Y-%m-%d %H:%i:%s'
+        ) as timestamp,
+        ROUND(AVG(kelembapan), 1) as value
       FROM sensor_data
       WHERE waktu >= ?
-      ORDER BY waktu ASC
-    `, [startDateStr]);
+      GROUP BY timestamp
+      ORDER BY timestamp ASC
+    `, [interval, startDateStr]);
 
     const [upsHum] = await pool.query(`
-      SELECT waktu as timestamp, kelembapan as value
+      SELECT 
+        DATE_FORMAT(
+          DATE_ADD(
+            DATE_FORMAT(waktu, '%Y-%m-%d %H:%i:00'),
+            INTERVAL (MINUTE(waktu) DIV MINUTE(?)) MINUTE
+          ),
+          '%Y-%m-%d %H:%i:%s'
+        ) as timestamp,
+        ROUND(AVG(kelembapan), 1) as value
       FROM sensor_data1
       WHERE waktu >= ?
-      ORDER BY waktu ASC
-    `, [startDateStr]);
+      GROUP BY timestamp
+      ORDER BY timestamp ASC
+    `, [interval, startDateStr]);
 
-    // Fetch electrical data
+    // Fetch electrical data with time-based aggregation
     const [electrical] = await pool.query(`
       SELECT 
-        waktu as timestamp,
-        phase_r,
-        phase_s,
-        phase_t
+        DATE_FORMAT(
+          DATE_ADD(
+            DATE_FORMAT(waktu, '%Y-%m-%d %H:%i:00'),
+            INTERVAL (MINUTE(waktu) DIV MINUTE(?)) MINUTE
+          ),
+          '%Y-%m-%d %H:%i:%s'
+        ) as timestamp,
+        ROUND(AVG(phase_r), 1) as phase_r,
+        ROUND(AVG(phase_s), 1) as phase_s,
+        ROUND(AVG(phase_t), 1) as phase_t
       FROM listrik_noc
       WHERE waktu >= ?
-      ORDER BY waktu ASC
-    `, [startDateStr]);
+      GROUP BY timestamp
+      ORDER BY timestamp ASC
+    `, [interval, startDateStr]);
 
     return {
       temperature: {
